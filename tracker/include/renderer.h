@@ -10,12 +10,37 @@
 
 void drawBoxes(cv::Mat &image, const std::vector<Box>& boxes)
 {
-    // Draw the boxes
-    for (const auto& box : boxes)
+    // Establish colours
+    cv::Scalar delete_color = cv::Scalar(255, 0, 0); // Red
+    cv::Scalar keep_color = cv::Scalar(0, 0, 255); // Blue
+
+    // Draw the boxes with index measurements
+    for (size_t i = 0; i < boxes.size(); ++i)
     {
-        // Draw the box
-        cv::rectangle(image, 
-            box.getCvRect(), cv::Scalar(255, 0, 0), 2);
+        const auto& box = boxes[i];
+
+        if (box.to_delete)
+        {
+            // Draw the box
+            cv::rectangle(image, 
+                box.getCvRect(), delete_color, 1);
+
+            // Draw the index
+            cv::putText(image, std::to_string(i),
+                box.getBottomRight(), cv::FONT_HERSHEY_SIMPLEX, 
+                0.5, delete_color, 1);
+        }
+        else
+        {
+            // Draw the box
+            cv::rectangle(image, 
+                box.getCvRect(), keep_color, 1);
+
+            // Draw the index
+            cv::putText(image, std::to_string(i),
+                box.getBottomRight(), cv::FONT_HERSHEY_SIMPLEX, 
+                0.5, keep_color, 1);
+        }
     }
 };
 
@@ -33,7 +58,7 @@ void drawTrackedBoxes(cv::Mat &image,
 
         // Draw the box
         cv::rectangle(image, 
-            box_filter.box.getCvRect(), cv::Scalar(0, 255, 0), 1);
+            box_filter.box.getCvRect(), cv::Scalar(0, 255, 0), 2);
 
         // Draw the confidence bound
         cv::ellipse(image, 

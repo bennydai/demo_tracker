@@ -45,7 +45,7 @@ public:
     };
 
     // Track
-    void track(const std::vector<Box>& boxes, 
+    std::vector<Box> track(const std::vector<Box>& boxes, 
         const double& timestamp, const cv::Mat& image)
     {
         // Predict all the tracked boxes
@@ -56,12 +56,12 @@ public:
         }
 
         // @TODO run hungarian algorithm to determine matches
-        findBestMatches(boxes, image);
+        DataAssociationResults results = findBestMatches(boxes, image);
 
         std::cout << "Current ID counter: " << id_counter << std::endl;
 
         // Update all the boxes
-
+        return results.processed_boxes;
     };
 
     // Get tracked boxes
@@ -81,7 +81,8 @@ private:
     int id_counter = 0;
 
     // Run the hungarian algorithm to determine matches
-    void findBestMatches(const std::vector<Box>& boxes, const cv::Mat& image)
+    DataAssociationResults findBestMatches(
+        const std::vector<Box>& boxes, const cv::Mat& image)
     {
         // @TODO implement
         // 1. Create cost matrix with cost values
@@ -90,7 +91,18 @@ private:
 
         // @TODO might need to put this into a class
         HungarianSolver solver(tracked_boxes_, boxes);
-        bool success = solver.solve();
+
+        DataAssociationResults results;
+
+        bool success = solver.solve(results);
+
+        // Check if success
+        if (success)
+        {
+            return results;
+        }
+
+        return DataAssociationResults();
     };
 
     // Overlap removal for initialising 

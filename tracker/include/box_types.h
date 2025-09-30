@@ -47,6 +47,9 @@ struct Box
     double width;
     double height;
     double confidence;
+
+    // Flag to set if the box will be deleted
+    bool to_delete = false;
 };
 
 struct BoxFilter

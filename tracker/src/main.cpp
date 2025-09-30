@@ -28,8 +28,8 @@ void emulateAndTrack(const std::map<std::string, std::vector<Box>>& data,
         // Read the image
         cv::Mat image = cv::imread(image_path);
 
-        // draw boxes
-        drawBoxes(image, boxes);
+        // Create new processed boxes
+        std::vector<Box> processed_boxes;
 
         // Check if map is empty
         if (tracker.isEmpty())
@@ -40,15 +40,20 @@ void emulateAndTrack(const std::map<std::string, std::vector<Box>>& data,
         else
         {
             // Run tracking
-            tracker.track(boxes, current_timestamp, image);
+            processed_boxes = tracker.track(boxes, current_timestamp, image);
         }
 
         // Grab the boxes and ids
         const std::unordered_map<int, BoxFilter> tracked_boxes = 
             tracker.getTrackedBoxes();
 
+        // @TODO grab the indexes of the boxes that are ok etc.
+
         // Draw the tracked boxes
         drawTrackedBoxes(image, tracked_boxes);
+
+        // draw boxes
+        drawBoxes(image, processed_boxes);
 
         // Show the image
         cv::imshow("Phillip likes goth girls", image);
