@@ -1,0 +1,16 @@
+{
+    "name": "tracker",
+    "dockerFile": "../Dockerfile",
+    "extensions":[
+        "ms-python.python",
+        "ms-vscode.cpptools",
+    ],
+    "settings":{
+        "terminal.integrated.automationShell.linux": "/bin/bash",
+    },
+    "mounts":[
+        "src=./data,dst=/app/data,type=bind,consistency=cached"
+    ],
+    "workspaceMount": "src=./tracker,dst=/app/tracker,type=bind,consistency=cached",
+    "workspaceFolder": "/app/"
+}
