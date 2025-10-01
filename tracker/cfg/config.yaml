@@ -1,0 +1,6 @@
+directory: "../../data/benchmark"
+
+visualisation:
+  debug: true
+  scale: 0.7
+  slow_factor: 5.0 # Higher number is slower

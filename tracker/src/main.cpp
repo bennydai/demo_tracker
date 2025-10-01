@@ -1,4 +1,6 @@
 #include <iostream>
+#include <string>
+#include <yaml-cpp/yaml.h>
 #include "csv_parser.h"
 #include "box_types.h"
 #include "renderer.h"
@@ -6,7 +8,8 @@
 
 void emulateAndTrack(const std::map<std::string, std::vector<Box>>& data, 
     const std::map<std::string, double>& timestamp_image_map, 
-    BoxTracker& tracker)
+    BoxTracker& tracker, const bool &debug_visualisation, 
+    const double &visualisation_scale, const double &visualisation_slow_factor)
 {
     // Create variables
     double current_timestamp = 0.0;
@@ -47,39 +50,75 @@ void emulateAndTrack(const std::map<std::string, std::vector<Box>>& data,
         const std::unordered_map<int, BoxFilter> tracked_boxes = 
             tracker.getTrackedBoxes();
 
-        // @TODO grab the indexes of the boxes that are ok etc.
-
-        // Draw the tracked boxes
-        drawTrackedBoxes(image, tracked_boxes);
-
-        // draw boxes
-        drawBoxes(image, processed_boxes);
-
-        // Show the image
-        cv::imshow("Phillip likes goth girls", image);
-
         // Calculate wait for
-        int wait_time = (current_timestamp - previous_timestamp) * 1000;
-
-        // Delay
-        cv::waitKey(0);
+        const int wait_time = (current_timestamp - previous_timestamp) * 1000 * 
+            visualisation_slow_factor;
 
         // Set the previous timestamp
         previous_timestamp = current_timestamp;
+
+        // bifurcate dev mode vs normal mode etc.
+        if (debug_visualisation)
+        {
+            // Draw the tracked boxes
+            drawTrackedBoxesDebug(image, tracked_boxes);
+
+            // Draw boxes
+            drawBoxesDebug(image, processed_boxes);
+
+            // Scale image
+            if (visualisation_scale != 1.0)
+            {
+                cv::resize(image, image, cv::Size(), visualisation_scale, 
+                    visualisation_scale, cv::INTER_CUBIC);
+            }
+
+            // Show the image
+            cv::imshow("Phillip likes goth girls", image);
+
+            // Delay
+            cv::waitKey(0);
+        }
+        else
+        {
+            // Draw boxes
+            cv::Mat output_image = drawBoxes(image, 
+                processed_boxes, tracked_boxes);
+
+            // Scale image
+            if (visualisation_scale != 1.0)
+            {
+                cv::resize(output_image, output_image, cv::Size(), visualisation_scale,
+                    visualisation_scale, cv::INTER_CUBIC);
+            }
+
+            // Show the image
+            cv::imshow("Phillip likes goth girls", output_image);
+
+            // Delay 
+            cv::waitKey(wait_time);
+        }
     }
 };
 
 int main(int argc, char *argv[]) 
 {
-    std::cout << "Phillip likes goth girls" << std::endl;
+    // @TODO parse in cfg file
+    std::string path_to_config = "../cfg/config.yaml";
 
-    // Create csv filepath string
-    std::string baseDirectory;
+    // Load configuration
+    YAML::Node config = YAML::LoadFile(path_to_config);
 
-    // Parse command line argument
-    if (argc > 1) {
-        baseDirectory = argv[1];
-    }
+    // Parse in base directory
+    std::string baseDirectory = config["directory"].as<std::string>();
+
+    // Parse in debug visualisation
+    const bool debug_visualisation = 
+        config["visualisation"]["debug"].as<bool>();
+    const double visualisation_scale = 
+        config["visualisation"]["scale"].as<double>();
+    const double visualisation_slow_factor =
+        config["visualisation"]["slow_factor"].as<double>();
 
     // Create emulator
     Emulator emulator(baseDirectory);
@@ -105,7 +144,9 @@ int main(int argc, char *argv[])
     BoxTracker tracker;
 
     // Run emulate and tracking loop
-    emulateAndTrack(data, timestamp_image_map, tracker);
+    emulateAndTrack(data, timestamp_image_map, tracker, 
+        debug_visualisation, visualisation_scale, 
+        visualisation_slow_factor);
 
     return 0;
 }

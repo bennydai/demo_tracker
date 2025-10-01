@@ -8,7 +8,7 @@
 #include <vector>
 #include <string>
 
-void drawBoxes(cv::Mat &image, const std::vector<Box>& boxes)
+void drawBoxesDebug(cv::Mat &image, const std::vector<Box>& boxes)
 {
     // Establish colours
     cv::Scalar delete_color = cv::Scalar(255, 0, 0); // Red
@@ -44,7 +44,7 @@ void drawBoxes(cv::Mat &image, const std::vector<Box>& boxes)
     }
 };
 
-void drawTrackedBoxes(cv::Mat &image, 
+void drawTrackedBoxesDebug(cv::Mat &image, 
     const std::unordered_map<int, BoxFilter>& tracked_boxes)
 {
     // Draw the boxes
@@ -53,23 +53,83 @@ void drawTrackedBoxes(cv::Mat &image,
         const int id = entry.first;
         const BoxFilter& box_filter = entry.second;
 
+        // Only draw if confident 
+        if (box_filter.isDisplayable())
+        {
+            // Draw the box
+            cv::rectangle(image, box_filter.box.getCvRect(), 
+                cv::Scalar(255, 255, 0), 2);
+
+            // Draw the ID
+            cv::putText(image, std::to_string(id), 
+                box_filter.box.getTopLeft(), cv::FONT_HERSHEY_SIMPLEX, 
+                1.0, cv::Scalar(255, 255, 0), 2);
+        }
+        else
+        {
+            // Draw the box
+            cv::rectangle(image, box_filter.box.getCvRect(), 
+                cv::Scalar(0, 255, 0), 1);
+
+            // Draw the ID
+            cv::putText(image, std::to_string(id), 
+                box_filter.box.getTopLeft(), cv::FONT_HERSHEY_SIMPLEX, 
+                0.5, cv::Scalar(0, 255, 0), 1);
+        }
+
         // Grab the confidence 
         Eigen::Vector3i cov_ellipse = box_filter.getCovEllipse();
-
-        // Draw the box
-        cv::rectangle(image, 
-            box_filter.box.getCvRect(), cv::Scalar(0, 255, 0), 2);
 
         // Draw the confidence bound
         cv::ellipse(image, 
             box_filter.box.getCenter(), cv::Size(cov_ellipse[0], cov_ellipse[1]),
             cov_ellipse[2], 0, 360, cv::Scalar(0, 255, 0), 1);
-
-        // Draw the ID
-        cv::putText(image, std::to_string(id), 
-            box_filter.box.getTopLeft(), cv::FONT_HERSHEY_SIMPLEX, 
-            1.0, cv::Scalar(0, 255, 0), 2);
     }
+};
+
+cv::Mat drawBoxes(const cv::Mat &image, const std::vector<Box>& boxes, 
+    const std::unordered_map<int, BoxFilter>& tracked_boxes)
+{
+    // Create a copy of the image
+    cv::Mat raw_image = image.clone();
+    cv::Mat tracked_image = image.clone();
+
+    // Draw the raw boxes
+    for (size_t i = 0; i < boxes.size(); ++i)
+    {
+        const auto& box = boxes[i];
+
+        // Draw the box
+        cv::rectangle(raw_image, 
+            box.getCvRect(), cv::Scalar(0, 0, 255), 1);
+    }
+
+    // Draw the tracked boxes
+    for (const auto & entry : tracked_boxes)
+    {
+        const int id = entry.first;
+        const BoxFilter& box_filter = entry.second;
+
+        // Only draw if confident
+        if (box_filter.isDisplayable())
+        {
+            // Draw the box
+            cv::rectangle(tracked_image, box_filter.box.getCvRect(), 
+                cv::Scalar(255, 255, 0), 1);
+
+            // Draw the ID
+            cv::putText(tracked_image, std::to_string(id), 
+                box_filter.box.getTopLeft(), cv::FONT_HERSHEY_SIMPLEX, 
+                1.0, cv::Scalar(255, 255, 0), 1);
+        }
+    }
+
+    // Combine the two images side by side
+    cv::Mat combined_image;
+    cv::hconcat(raw_image, tracked_image, combined_image);
+
+    // @TODO draw stuff etc
+    return combined_image;
 };
 
 class Emulator

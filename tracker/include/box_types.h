@@ -52,30 +52,143 @@ struct Box
     bool to_delete = false;
 };
 
-struct BoxFilter
+class BoxFilter
 {
+public:
     BoxFilter(const Box& box, const double& timestamp) : 
         box(box), ts(timestamp) {};
 
     // Parameters
     Box box;
 
-    // Velocity parameters @TODO test F with various vel
+    // Check if the tracked box is confident
+    bool isConfident() const
+    {
+        // Check if the positional covariance is below threshold
+        const Eigen::Matrix2d pos_cov = getCovariance();
+        const double trace = pos_cov.trace();
+
+        return trace < cull_threshold;
+    };
+
+    // Check if the tracked box is within displayable range
+    bool isDisplayable() const
+    {
+        // Check if the positional covariance is below threshold
+        const Eigen::Matrix2d pos_cov = getCovariance();
+        const double trace = pos_cov.trace();
+
+        return trace < display_threshold;
+    };
+
+    // Get positional covariance
+    Eigen::Matrix2d getCovariance() const
+    {
+        return P_cov.block<2, 2>(0, 0);
+    };
+
+    // Run prediction
+    void predict(const double &current_ts)
+    {
+        // Calculate dt
+        double dt = current_ts - ts;
+
+        // Create state vector
+        Eigen::VectorXd state = getState();
+
+        // Create the F matrix
+        const Eigen::MatrixXd F = createF(dt);
+
+        // Update the state
+        state = F * state;
+
+        // Apply state correction
+        correct(state);
+
+        // Update the state covariance matrix
+        P_cov = F * P_cov * F.transpose() + Q_cov;
+
+        // Update ts
+        ts = current_ts;
+    };
+
+    // Run update step
+    void update(const Box& measurement)
+    {
+        // Create H Matrix
+        const Eigen::Matrix<double, 4, 8> H = createH();
+
+        // Calculate the Kalman Gain
+        const Eigen::Matrix<double, 8, 4> K = createKalmanGain(H);
+
+        // Update state vector
+        Eigen::VectorXd state = getState();
+
+        // Create measurement vector
+        Eigen::Vector4d z;
+        z << measurement.center[0], measurement.center[1],
+                measurement.width, measurement.height;
+        
+        // Correct state
+        state = state + K * (z - H * state);
+
+        // Apply state correction
+        correct(state);
+
+        // Update covariance
+        P_cov = (Eigen::MatrixXd::Identity(8, 8) - K * H) * P_cov;
+    };
+
+    // Get covariance bound
+    Eigen::Vector3i getCovEllipse(const int sigma_bound = 3) const
+    {
+        // Grab the positional covariance
+        Eigen::Matrix2d pos_cov = P_cov.block<2, 2>(0, 0);
+
+        // Calculate the eigenvalues and eigenvectors
+        Eigen::EigenSolver<Eigen::MatrixXd> es(pos_cov);
+
+        // Get the eigenvalues and eigenvectors
+        Eigen::VectorXd eigenvalues = es.eigenvalues().real();
+        Eigen::MatrixXd eigenvectors = es.eigenvectors().real();
+
+        // Calculate the minor axis
+        double major_bound = sigma_bound * std::sqrt(eigenvalues(0));
+        double minor_bound = sigma_bound * std::sqrt(eigenvalues(1));
+
+        // Calculate the angle of rotation
+        double angle = std::atan2(eigenvectors(1, 0), 
+            eigenvectors(0, 0)) * 180.0 / CV_PI;
+
+        // Cast values to int
+        major_bound = std::round(major_bound);
+        minor_bound = std::round(minor_bound);
+        angle = std::round(angle);
+
+        // Return as vector
+        return Eigen::Vector3i(major_bound, minor_bound, angle);
+    };
+
+private:
+    // Velocities
     double vel_cx = 0;
     double vel_cy = 0;
     double vel_w = 0;
     double vel_h = 0;
 
     // @TODO tune variables
-
     // Covariance Matrix
-    Eigen::MatrixXd P_cov = Eigen::MatrixXd::Identity(8, 8) * 5.0;
+    Eigen::MatrixXd P_cov = Eigen::MatrixXd::Identity(8, 8) * 100.0;
+
+    // Threshold for culling and displaying
+    const double cull_threshold = 150.0;
+    const double display_threshold = 30.0;
 
     // Pertubation Matrix for prediction 
-    Eigen::MatrixXd Q_cov = Eigen::MatrixXd::Identity(8, 8) * 5.0;
+    Eigen::MatrixXd Q_cov = Eigen::MatrixXd::Identity(8, 8) * 10.0;
 
     // Pertubation Matrix for measurement
-    Eigen::MatrixXd R_cov = Eigen::MatrixXd::Identity(4, 4) * 4.0;
+    Eigen::MatrixXd R_cov = Eigen::MatrixXd::Identity(4, 4) * 7.5;
 
     // Current timestamp
     double ts = 0;
@@ -114,29 +227,31 @@ struct BoxFilter
         vel_h = state[7];
     };
 
-    // Run prediction
-    void predict(const double &current_ts)
+    // Create H matrix
+    Eigen::Matrix<double, 4, 8> createH() const
     {
-        // Calculate dt
-        double dt = current_ts - ts;
+        Eigen::Matrix<double, 4, 8> H = Eigen::Matrix<double, 4, 8>::Zero();
 
-        // Create state vector
-        Eigen::VectorXd state = getState();
+        // Fill in the H matrix
+        H(0, 0) = 1;
+        H(1, 1) = 1;
+        H(2, 2) = 1;
+        H(3, 3) = 1;
 
-        // Create the F matrix
-        const Eigen::MatrixXd F = createF(dt);
+        return H;
+    };
 
-        // Update the state
-        state = F * state;
+    // Create Kalman Gain Matrix
+    Eigen::Matrix<double, 8, 4> createKalmanGain(
+        const Eigen::Matrix<double, 4, 8> &H) const
+    {
+        // Calculate the innovation covariance S
+        Eigen::Matrix4d S = (H * P_cov * H.transpose()) + R_cov;
 
-        // Apply state correction
-        correct(state);
+        // Calculate the Kalman Gain K
+        Eigen::Matrix<double, 8, 4> K = P_cov * H.transpose() * S.inverse();
 
-        // Update the state covariance matrix
-        P_cov = F * P_cov * F.transpose() + Q_cov;
-
-        // Update ts
-        ts = current_ts;
+        return K;
     };
 
     // Create state transition matrix
@@ -169,90 +284,6 @@ struct BoxFilter
         F(3, 7) = dt;
 
         return F;
-    };
-
-    // Run update step
-    void update(const Box& measurement)
-    {
-        // Create H Matrix
-        const Eigen::Matrix<double, 4, 8> H = createH();
-
-        // Calculate the Kalman Gain
-        const Eigen::Matrix<double, 8, 4> K = createKalmanGain(H);
-
-        // Update state vector
-        Eigen::VectorXd state = getState();
-
-        // Create measurement vector
-        Eigen::Vector4d z;
-        z << measurement.center[0], measurement.center[1],
-                measurement.width, measurement.height;
-        
-        // Correct state
-        state = state + K * (z - H * state);
-
-        // Apply state correction
-        correct(state);
-
-        // Update covariance
-        P_cov = (Eigen::MatrixXd::Identity(8, 8) - K * H) * P_cov;
-    };
-
-    // Create H matrix
-    Eigen::Matrix<double, 4, 8> createH() const
-    {
-        Eigen::Matrix<double, 4, 8> H = Eigen::Matrix<double, 4, 8>::Zero();
-
-        // Fill in the H matrix
-        H(0, 0) = 1;
-        H(1, 1) = 1;
-        H(2, 2) = 1;
-        H(3, 3) = 1;
-
-        return H;
-    };
-
-    // Create Kalman Gain Matrix
-    Eigen::Matrix<double, 8, 4> createKalmanGain(
-        const Eigen::Matrix<double, 4, 8> &H) const
-    {
-        // Calculate the innovation covariance S
-        Eigen::Matrix4d S = (H * P_cov * H.transpose()) + R_cov;
-
-        // Calculate the Kalman Gain K
-        Eigen::Matrix<double, 8, 4> K = P_cov * H.transpose() * S.inverse();
-
-        return K;
-    };
-
-    // Get covariance bound
-    Eigen::Vector3i getCovEllipse(const int sigma_bound = 3) const
-    {
-        // Grab the positional covariance
-        Eigen::Matrix2d pos_cov = P_cov.block<2, 2>(0, 0);
-
-        // Calculate the eigenvalues and eigenvectors
-        Eigen::EigenSolver<Eigen::MatrixXd> es(pos_cov);
-
-        // Get the eigenvalues and eigenvectors
-        Eigen::VectorXd eigenvalues = es.eigenvalues().real();
-        Eigen::MatrixXd eigenvectors = es.eigenvectors().real();
-
-        // Calculate the minor axis
-        double major_bound = sigma_bound * std::sqrt(eigenvalues(0));
-        double minor_bound = sigma_bound * std::sqrt(eigenvalues(1));
-
-        // Calculate the angle of rotation
-        double angle = std::atan2(eigenvectors(1, 0), 
-            eigenvectors(0, 0)) * 180.0 / CV_PI;
-
-        // Cast values to int
-        major_bound = std::round(major_bound);
-        minor_bound = std::round(minor_bound);
-        angle = std::round(angle);
-
-        // Return as vector
-        return Eigen::Vector3i(major_bound, minor_bound, angle);
     };
 };
 #endif 

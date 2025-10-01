@@ -32,7 +32,7 @@ public:
     void init(const std::vector<Box>& boxes, 
         const double& timestamp)
     {
-        // Check that there is no overlapping boxes @TODO
+        // Check that there is no overlapping boxes 
         std::vector<Box> filtered_boxes = checkForOverlaps(boxes);
 
         for (const auto& box : filtered_boxes)
@@ -40,8 +40,8 @@ public:
             tracked_boxes_.emplace(id_counter++, BoxFilter(box, timestamp));
         }
 
-        // Print number of initialisations
-        std::cout << "Number of initialisations: " << getSize() << std::endl;
+        // Print number of tracked boxes
+        std::cout << "Number of tracked boxes: " << getSize() << std::endl;
     };
 
     // Track
@@ -60,19 +60,11 @@ public:
 
         if (results._matches.size() > 0)
         {
-            // Run update for matched boxes
-            std::cout << "Updating matched boxes..." << std::endl;
-            std::cout << "Number of matches found: ";
-            std::cout << results._matches.size() << std::endl;
-
-            // Iterate through the matches
+            // Iterate through the matches and update
             for (auto & [tracker_id, box_idx] : results._matches)
             {
                 // Fetch the filter
                 BoxFilter& tracked_box_filter = tracked_boxes_.at(tracker_id);
-
-                // Confirm id matches
-                std::cout << "Updating Tracker ID: " << tracker_id << std::endl;
 
                 // Retrieve the new box measurement
                 const Box& new_box = boxes[box_idx];
@@ -80,6 +72,23 @@ public:
                 // Run the update step of the Kalman filter
                 tracked_box_filter.update(new_box);
             }
+        }
+
+        // Delete unconfident tracked boxes
+        cullUnconfidentBoxes();
+
+        // Initialise new boxes
+        if (results._new_boxes_to_init.size() > 0)
+        {
+            // Create vector of boxes to init
+            std::vector<Box> boxes_to_init;
+            for (const auto& idx : results._new_boxes_to_init)
+            {
+                boxes_to_init.push_back(boxes[idx]);
+            }
+
+            // Initialise new boxes
+            init(boxes_to_init, timestamp);
         }
 
         // Update all the boxes
@@ -93,9 +102,6 @@ public:
     }
 
 private:
-    // Kalman filter implementation details @todo
-    // ...
-
     // Unordered map
     std::unordered_map<int, BoxFilter> tracked_boxes_;
 
@@ -106,12 +112,6 @@ private:
     DataAssociationResults findBestMatches(
         const std::vector<Box>& boxes, const cv::Mat& image)
     {
-        // @TODO implement
-        // 1. Create cost matrix with cost values
-        // 2. Apply Hungarian algorithm
-        // 3. Return matches
-
-        // @TODO might need to put this into a class
         HungarianSolver solver(tracked_boxes_, boxes);
 
         DataAssociationResults results;
@@ -130,14 +130,9 @@ private:
     // Overlap removal for initialising 
     std::vector<Box> checkForOverlaps(const std::vector<Box> &boxes)
     {
-        // Checking for overlaps
-        std::cout << "Checking for overlaps..." << std::endl;
-
         // Create a cost matrix
         Eigen::MatrixXd cost_matrix = 
             Eigen::MatrixXd::Zero(boxes.size(), boxes.size());
-
-        // Print 
 
         // For each box, calculate iou
         for (int i = 0; i < boxes.size(); ++i)
@@ -174,10 +169,6 @@ private:
             }
         }
 
-        // Size of overlap indices
-        std::cout << "Number of overlapping box pairs: " 
-                  << overlap_indices.size() << std::endl;
-
         // Indices to remove
         std::unordered_set<int> indices_to_remove;
 
@@ -198,11 +189,29 @@ private:
             }
         }
 
-        // Print number of boxes removed
-        std::cout << "Filtered boxes count: " << filtered_boxes.size() << std::endl;
-        std::cout << "Original boxes count: " << boxes.size() << std::endl;
-
         return filtered_boxes;
+    };
+
+    // Cull unconfident boxes
+    void cullUnconfidentBoxes()
+    {
+        std::vector<int> ids_to_remove;
+
+        // Iterate through tracked boxes and remove unconfident ones
+        for (const auto& [id, box_filter] : tracked_boxes_)
+        {
+            if (!box_filter.isConfident())
+            {
+                std::cout << "Culling Tracker ID: " << id << std::endl;
+                ids_to_remove.push_back(id);
+            }
+        }
+
+        // Remove culled boxes
+        for (int id : ids_to_remove)
+        {
+            tracked_boxes_.erase(id);
+        }
     };
 };
 

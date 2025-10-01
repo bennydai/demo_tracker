@@ -36,16 +36,6 @@ struct DataAssociationResults
         {
             _matches[tracked_indices[match.first].second] = match.second;
         }
-
-        // Print to double check
-        std::cout << "DataAssociationResults initialised with:" << std::endl;
-        std::cout << "Matches: " << std::endl;
-        for (const auto & pair : _matches)
-        {
-            std::cout << "Tracked ID: " << pair.first;
-            std::cout << " -> New Box Index: " << pair.second << std::endl;
-        }
-        std::cout << std::endl;
     };
 };
 
@@ -58,7 +48,7 @@ public:
         new_boxes_(new_boxes), num_tracked_(tracked_boxes.size()),
         num_new_(new_boxes.size()) {};
 
-    // Solve @TODO need to pass in argument
+    // Solve 
     bool solve(DataAssociationResults &results)
     {
         // Check if we can apply hungarian algorithm
@@ -68,9 +58,6 @@ public:
             return false;
         }
 
-        // Proceed with Hungarian algorithm
-        std::cout << "Applying Hungarian algorithm..." << std::endl;
-
         // Create Eigen matrix of zeros
         Eigen::MatrixXd cost_matrix = 
             Eigen::MatrixXd::Ones(num_rows_, num_cols_) * 10.0;
@@ -79,12 +66,6 @@ public:
         std::vector<std::pair<int, int>> tracked_indices;
         std::vector<int> new_indices(num_new_);
         std::iota(new_indices.begin(), new_indices.end(), 0);
-
-        std::cout << "Print size of cost matrix: " 
-            << cost_matrix.rows() << " x " << cost_matrix.cols() << std::endl;
-
-        std::cout << "Number of tracked boxes: " 
-            << num_tracked_ << std::endl;
 
         // Calculate cost matrix
         calculateCostMatrix(cost_matrix, tracked_indices);
@@ -203,7 +184,8 @@ private:
         const std::vector<int> &new_indices, 
         std::unordered_set<std::pair<int, int>, PairHash> &matches, 
         std::unordered_set<int> &unassigned_tracked_indices,
-        std::unordered_set<int> &unassigned_new_box_indices)
+        std::unordered_set<int> &unassigned_new_box_indices, 
+        bool debug = false)
     {
         // Step 1. Reduce the rows
         for (int i = 0; i < cost_matrix.rows(); ++i)
@@ -224,6 +206,9 @@ private:
         {
             valid_tracked_indices.insert(pair.first);
         }
+
+        // Set to track unique column indices
+        std::set<int> unique_col_indices;
 
         // Check if there is only one zero in each row
         for (int i = 0; i < cost_matrix.rows(); ++i)
@@ -247,9 +232,6 @@ private:
         // Check if unique_row_count is equivalent to the number of rows
         if (unique_row_count == rows_to_match)
         {
-            std::cout << "All rows have a unique zero." << std::endl;
-            std::cout << "Optimal assignment found." << std::endl;
-
             // Find the zero positions
             for (int i = 0; i < cost_matrix.rows(); ++i)
             {
@@ -265,10 +247,28 @@ private:
                     Eigen::Index col_index;
                     double min_value = cost_matrix.row(i).minCoeff(&col_index);
 
-                    matches.insert({tracked_indices[i].first, col_index});
+                    // Insert col index
+                    std::pair<std::set<int>::iterator, bool> result = 
+                        unique_col_indices.insert(col_index);
 
-                    // Remove from unassigned new box indices
-                    unassigned_new_box_indices.erase(col_index);
+                    // Check result
+                    if (result.second)
+                    {
+                        // Unique insertion
+                        matches.insert({i, col_index});
+
+                        // Remove from unassigned new box indices
+                        unassigned_new_box_indices.erase(col_index);
+                    }
+                    else
+                    {
+                        // Duplicate case - should not happen
+                        std::cout << "Duplicate column index found: " 
+                            << col_index << std::endl;
+
+                        // Insert into unassigned tracked indices
+                        unassigned_tracked_indices.insert(i);
+                    }
                 }
                 else
                 {
@@ -278,29 +278,33 @@ private:
                 }
             }
 
-            for (const auto& match : matches)
+            if (debug)
             {
-                std::cout << "Tracked ID: " << tracked_indices[match.first].second;
-                std::cout << " @ row " << match.first;
-                std::cout << " matched to New Box Index: " << match.second << std::endl;
-            }
+                // Print matches
+                for (const auto& match : matches)
+                {
+                    std::cout << "Tracked ID: " << tracked_indices[match.first].second;
+                    std::cout << " @ row " << match.first;
+                    std::cout << " matched to New Box Index: " << match.second << std::endl;
+                }
 
-            // Check unassigned new indices
-            std::cout << "Unassigned new box indices: [";
-            for (const auto& idx : unassigned_new_box_indices)
-            {
-                std::cout << idx << " ";
-            }
-            std::cout << "]" << std::endl;
+                // Check unassigned new indices
+                std::cout << "Unassigned new box indices: [";
+                for (const auto& idx : unassigned_new_box_indices)
+                {
+                    std::cout << idx << " ";
+                }
+                std::cout << "]" << std::endl;
 
-            // Print out unassigned tracked indices
-            std::cout << "Unassigned tracked indices: [";
-            for (const auto & idx : unassigned_tracked_indices)
-            {
-                std::cout << idx << " ";
-                std::cout << " -> Tracker ID: " << tracked_indices[idx].second << " ";
+                // Print out unassigned tracked indices
+                std::cout << "Unassigned tracked indices: [";
+                for (const auto & idx : unassigned_tracked_indices)
+                {
+                    std::cout << idx << " ";
+                    std::cout << " -> Tracker ID: " << tracked_indices[idx].second << " ";
+                }
+                std::cout << "]" << std::endl;
             }
-            std::cout << "]" << std::endl;
 
             return true;
         }
@@ -317,7 +321,7 @@ private:
             Eigen::MatrixXd::Zero(tracked_indices.size(), 
             unassigned_new_box_indices.size());
 
-        // @TODO calculate iou costs between existing boxes
+        // Calculate iou costs between existing boxes
         for (int i = 0; i < tracked_indices.size(); ++i)
         {
             // Get tracked box
@@ -370,14 +374,6 @@ private:
             }
         }
 
-        // Check if any new boxes are to be initialised
-        std::cout << "New boxes to initialise after column reduction: [";
-        for (const auto& idx : filtered_new_box_indices)
-        {
-            std::cout << idx << " ";
-        }
-        std::cout << "]" << std::endl;
-
         return filtered_new_box_indices;
     };
 
@@ -419,9 +415,6 @@ private:
                 cost_matrix(i, j) = calculateIoU(box_i, box_j, true);
             }
         }
-
-        std::cout << "Cost matrix for new box overlaps: " << std::endl;
-        std::cout << cost_matrix << std::endl;
 
         // Create indices to remove 
         std::unordered_set<std::pair<int, int>, PairHash> overlap_indices;

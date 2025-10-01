@@ -12,6 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Find packages
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 # Include directories
 include_directories(
@@ -25,4 +26,5 @@ set(SOURCES
 
 # Add executable
 add_executable(tracker ${SOURCES})
-target_link_libraries(tracker ${OpenCV_LIBS} Eigen3::Eigen)
+target_link_libraries(tracker 
+    ${OpenCV_LIBS} Eigen3::Eigen yaml-cpp::yaml-cpp)
