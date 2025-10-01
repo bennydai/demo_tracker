@@ -55,13 +55,35 @@ public:
             box_filter.predict(timestamp);
         }
 
-        // @TODO run hungarian algorithm to determine matches
+        // Run hungarian algorithm to determine matches
         DataAssociationResults results = findBestMatches(boxes, image);
 
-        std::cout << "Current ID counter: " << id_counter << std::endl;
+        if (results._matches.size() > 0)
+        {
+            // Run update for matched boxes
+            std::cout << "Updating matched boxes..." << std::endl;
+            std::cout << "Number of matches found: ";
+            std::cout << results._matches.size() << std::endl;
+
+            // Iterate through the matches
+            for (auto & [tracker_id, box_idx] : results._matches)
+            {
+                // Fetch the filter
+                BoxFilter& tracked_box_filter = tracked_boxes_.at(tracker_id);
+
+                // Confirm id matches
+                std::cout << "Updating Tracker ID: " << tracker_id << std::endl;
+
+                // Retrieve the new box measurement
+                const Box& new_box = boxes[box_idx];
+
+                // Run the update step of the Kalman filter
+                tracked_box_filter.update(new_box);
+            }
+        }
 
         // Update all the boxes
-        return results.processed_boxes;
+        return results._processed_boxes;
     };
 
     // Get tracked boxes

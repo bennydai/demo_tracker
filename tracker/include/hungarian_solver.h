@@ -11,12 +11,42 @@
 
 struct DataAssociationResults
 {
-    std::vector<std::pair<int, int>> matches;
-    std::unordered_set<int> untracked_boxes;
-    std::unordered_set<int> new_boxes_to_init;
+    std::unordered_map<int, int> _matches;
+    std::unordered_set<int> _untracked_boxes;
+    std::unordered_set<int> _new_boxes_to_init;
 
     // Filtered boxes 
-    std::vector<Box> processed_boxes;
+    std::vector<Box> _processed_boxes;
+
+    // Constructor with tracked indices
+    void update(const std::unordered_set<std::pair<int, int>, PairHash> &matches, 
+        const std::vector<std::pair<int, int>> &tracked_indices, 
+        const std::unordered_set<int> &untracked_boxes,
+        const std::unordered_set<int> &new_boxes_to_init,
+        const std::vector<Box> &processed_boxes)
+    {
+        // Reset all members
+        _matches.clear();
+        _untracked_boxes = untracked_boxes;
+        _new_boxes_to_init = new_boxes_to_init;
+        _processed_boxes = processed_boxes;
+
+        // Populate matches map
+        for (const auto & match : matches)
+        {
+            _matches[tracked_indices[match.first].second] = match.second;
+        }
+
+        // Print to double check
+        std::cout << "DataAssociationResults initialised with:" << std::endl;
+        std::cout << "Matches: " << std::endl;
+        for (const auto & pair : _matches)
+        {
+            std::cout << "Tracked ID: " << pair.first;
+            std::cout << " -> New Box Index: " << pair.second << std::endl;
+        }
+        std::cout << std::endl;
+    };
 };
 
 class HungarianSolver
@@ -103,11 +133,8 @@ public:
         }
 
         // Modify results
-        results.matches = std::vector<std::pair<int, int>>(
-            matches.begin(), matches.end());
-        results.untracked_boxes = unassigned_tracked_indices;
-        results.new_boxes_to_init = new_boxes_to_init;
-        results.processed_boxes = processed_boxes;
+        results.update(matches, tracked_indices, 
+            unassigned_tracked_indices, new_boxes_to_init, processed_boxes);
 
         return true;
     };
@@ -246,7 +273,8 @@ private:
                 else
                 {
                     // Dummy row case
-                    std::cout << "Row " << i << " is not a valid tracked index." << std::endl;
+                    std::cout << "Row " << i;
+                    std::cout << " is not a valid tracked index." << std::endl;
                 }
             }
 

@@ -63,26 +63,29 @@ struct BoxFilter
     // Velocity parameters @TODO test F with various vel
     double vel_cx = 0;
     double vel_cy = 0;
-    double vel_w = 10;
-    double vel_h = 10;
+    double vel_w = 0;
+    double vel_h = 0;
+
+    // @TODO tune variables
 
     // Covariance Matrix
     Eigen::MatrixXd P_cov = Eigen::MatrixXd::Identity(8, 8) * 5.0;
 
-    // Pertubation Matrix
-    Eigen::MatrixXd Q_cov = Eigen::MatrixXd::Identity(8, 8) * 1.0;
+    // Pertubation Matrix for prediction 
+    Eigen::MatrixXd Q_cov = Eigen::MatrixXd::Identity(8, 8) * 5.0;
+
+    // Pertubation Matrix for measurement
+    Eigen::MatrixXd R_cov = Eigen::MatrixXd::Identity(4, 4) * 4.0;
 
     // Current timestamp
     double ts = 0;
 
-    // Run prediction
-    void predict(const double &current_ts)
+    // Create state vector
+    Eigen::VectorXd getState() const
     {
-        // Calculate dt
-        double dt = current_ts - ts;
-
         // Create state vector
         Eigen::VectorXd state(8);
+
         state[0] = box.center[0];
         state[1] = box.center[1];
         state[2] = box.width;
@@ -92,17 +95,42 @@ struct BoxFilter
         state[6] = vel_w;
         state[7] = vel_h;
 
+        return state;
+    };
+
+    // Apply state correction 
+    void correct(const Eigen::VectorXd &state)
+    {
+        // Update box positions from state vector
+        box.center[0] = state[0];
+        box.center[1] = state[1];
+        box.width = state[2];
+        box.height = state[3];
+
+        // Update velocities
+        vel_cx = state[4];
+        vel_cy = state[5];
+        vel_w = state[6];
+        vel_h = state[7];
+    };
+
+    // Run prediction
+    void predict(const double &current_ts)
+    {
+        // Calculate dt
+        double dt = current_ts - ts;
+
+        // Create state vector
+        Eigen::VectorXd state = getState();
+
         // Create the F matrix
         const Eigen::MatrixXd F = createF(dt);
 
         // Update the state
         state = F * state;
 
-        // Update box positions based on constant velocities
-        box.center[0] += vel_cx * dt;
-        box.center[1] += vel_cy * dt;
-        box.width += vel_w * dt;
-        box.height += vel_h * dt;
+        // Apply state correction
+        correct(state);
 
         // Update the state covariance matrix
         P_cov = F * P_cov * F.transpose() + Q_cov;
@@ -143,7 +171,61 @@ struct BoxFilter
         return F;
     };
 
-    // @TODO get covariance
+    // Run update step
+    void update(const Box& measurement)
+    {
+        // Create H Matrix
+        const Eigen::Matrix<double, 4, 8> H = createH();
+
+        // Calculate the Kalman Gain
+        const Eigen::Matrix<double, 8, 4> K = createKalmanGain(H);
+
+        // Update state vector
+        Eigen::VectorXd state = getState();
+
+        // Create measurement vector
+        Eigen::Vector4d z;
+        z << measurement.center[0], measurement.center[1],
+                measurement.width, measurement.height;
+        
+        // Correct state
+        state = state + K * (z - H * state);
+
+        // Apply state correction
+        correct(state);
+
+        // Update covariance
+        P_cov = (Eigen::MatrixXd::Identity(8, 8) - K * H) * P_cov;
+    };
+
+    // Create H matrix
+    Eigen::Matrix<double, 4, 8> createH() const
+    {
+        Eigen::Matrix<double, 4, 8> H = Eigen::Matrix<double, 4, 8>::Zero();
+
+        // Fill in the H matrix
+        H(0, 0) = 1;
+        H(1, 1) = 1;
+        H(2, 2) = 1;
+        H(3, 3) = 1;
+
+        return H;
+    };
+
+    // Create Kalman Gain Matrix
+    Eigen::Matrix<double, 8, 4> createKalmanGain(
+        const Eigen::Matrix<double, 4, 8> &H) const
+    {
+        // Calculate the innovation covariance S
+        Eigen::Matrix4d S = (H * P_cov * H.transpose()) + R_cov;
+
+        // Calculate the Kalman Gain K
+        Eigen::Matrix<double, 8, 4> K = P_cov * H.transpose() * S.inverse();
+
+        return K;
+    };
+
+    // Get covariance bound
     Eigen::Vector3i getCovEllipse(const int sigma_bound = 3) const
     {
         // Grab the positional covariance

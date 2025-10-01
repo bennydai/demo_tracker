@@ -68,7 +68,7 @@ void drawTrackedBoxes(cv::Mat &image,
         // Draw the ID
         cv::putText(image, std::to_string(id), 
             box_filter.box.getTopLeft(), cv::FONT_HERSHEY_SIMPLEX, 
-            0.5, cv::Scalar(0, 255, 0), 1);
+            1.0, cv::Scalar(0, 255, 0), 2);
     }
 };
 
