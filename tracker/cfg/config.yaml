@@ -1,11 +1,16 @@
 # directory: "../../data/motile_conf_30"
-directory: "../../data/basler_40_conf_30"
+# directory: "../../data/basler_40_conf_30"
 # directory: "../../data/test_conf_30"
+# directory: "../../data/Dirty_Panning_Video_1_PC_conf_25"
+# directory: "../../data/Still_Dirty_swimming_4_conf_25"
+# directory: "../../data/Still_Dirty_swimming_1_conf_25"
+# directory: "../../data/aus_clinic_mock0_conf_25"
+directory: "../../data/aus_clinic_mock1_conf_25"
 
 visualisation:
-  debug: true
-  scale: 0.5
-  slow_factor: 5.0 # Higher number is slower
+  debug: false
+  scale: 1.0
+  slow_factor: 1.0 # Higher number is slower
 
 # Tuning parameters below
 filter_params:
