@@ -5,6 +5,44 @@
 #include <Eigen/Core>
 #include <opencv4/opencv2/core.hpp>
 
+struct FilterParams
+{
+    // Pass in filter parameters to reduce number of arguments
+    FilterParams(
+        const double& initial_P_pos_cov, const double& initial_P_vel_cov,
+        const double& process_Q_pos_cov, const double& process_Q_vel_cov,
+        const double& R_cov, const double& cull_threshold,
+        const double& display_threshold, const double& overlap_threshold) :
+        initial_P_pos_cov(initial_P_pos_cov),
+        initial_P_vel_cov(initial_P_vel_cov),
+        process_Q_pos_cov(process_Q_pos_cov),
+        process_Q_vel_cov(process_Q_vel_cov),
+        R_cov(R_cov),
+        cull_threshold(cull_threshold),
+        display_threshold(display_threshold),
+        overlap_threshold(overlap_threshold) {};
+
+    // Initial covariance for positions, width and height
+    const double initial_P_pos_cov;
+    // Initial covariance for velocities
+    const double initial_P_vel_cov;
+
+    // Process noise covariance for positions, width and height
+    const double process_Q_pos_cov;
+    // Process noise covariance for velocities
+    const double process_Q_vel_cov;
+
+    // Measurement noise covariance for positions, width and height
+    const double R_cov;
+
+    // Threshold for culling and displaying boxes
+    const double cull_threshold;
+    const double display_threshold;
+
+    // Threshold for removing overlapping boxes
+    const double overlap_threshold;
+};
+
 struct Box 
 {
     Box(const Eigen::Vector2d& center, 
@@ -55,8 +93,21 @@ struct Box
 class BoxFilter
 {
 public:
-    BoxFilter(const Box& box, const double& timestamp) : 
-        box(box), ts(timestamp) {};
+    BoxFilter(const Box& box, const double& timestamp, 
+        const FilterParams& params) : 
+        box(box), ts_(timestamp), params_(params)
+    {
+        // Set initial covariance
+        P_cov_.topLeftCorner(4, 4) *= params_.initial_P_pos_cov;
+        P_cov_.bottomRightCorner(4, 4) *= params_.initial_P_vel_cov;
+
+        // Set the process noise covariance
+        Q_cov_.topLeftCorner(4, 4) *= params_.process_Q_pos_cov;
+        Q_cov_.bottomRightCorner(4, 4) *= params_.process_Q_vel_cov;
+
+        // Set the measurement noise covariance
+        R_cov_ *= params_.R_cov;
+    };
 
     // Parameters
     Box box;
@@ -68,7 +119,7 @@ public:
         const Eigen::Matrix2d pos_cov = getCovariance();
         const double trace = pos_cov.trace();
 
-        return trace < cull_threshold;
+        return trace < params_.cull_threshold;
     };
 
     // Check if the tracked box is within displayable range
@@ -78,20 +129,20 @@ public:
         const Eigen::Matrix2d pos_cov = getCovariance();
         const double trace = pos_cov.trace();
 
-        return trace < display_threshold;
+        return trace < params_.display_threshold;
     };
 
     // Get positional covariance
     Eigen::Matrix2d getCovariance() const
     {
-        return P_cov.block<2, 2>(0, 0);
+        return P_cov_.block<2, 2>(0, 0);
     };
 
     // Run prediction
     void predict(const double &current_ts)
     {
         // Calculate dt
-        double dt = current_ts - ts;
+        double dt = current_ts - ts_;
 
         // Create state vector
         Eigen::VectorXd state = getState();
@@ -106,10 +157,10 @@ public:
         correct(state);
 
         // Update the state covariance matrix
-        P_cov = F * P_cov * F.transpose() + Q_cov;
+        P_cov_ = F * P_cov_ * F.transpose() + Q_cov_;
 
         // Update ts
-        ts = current_ts;
+        ts_ = current_ts;
     };
 
     // Run update step
@@ -136,14 +187,14 @@ public:
         correct(state);
 
         // Update covariance
-        P_cov = (Eigen::MatrixXd::Identity(8, 8) - K * H) * P_cov;
+        P_cov_ = (Eigen::MatrixXd::Identity(8, 8) - K * H) * P_cov_;
     };
 
     // Get covariance bound
     Eigen::Vector3i getCovEllipse(const int sigma_bound = 3) const
     {
         // Grab the positional covariance
-        Eigen::Matrix2d pos_cov = P_cov.block<2, 2>(0, 0);
+        Eigen::Matrix2d pos_cov = P_cov_.block<2, 2>(0, 0);
 
         // Calculate the eigenvalues and eigenvectors
         Eigen::EigenSolver<Eigen::MatrixXd> es(pos_cov);
@@ -171,27 +222,25 @@ public:
 
 private:
     // Velocities
-    double vel_cx = 0;
-    double vel_cy = 0;
-    double vel_w = 0;
-    double vel_h = 0;
+    double vel_cx_ = 0;
+    double vel_cy_ = 0;
+    double vel_w_ = 0;
+    double vel_h_ = 0;
 
-    // @TODO tune variables
     // Covariance Matrix
-    Eigen::MatrixXd P_cov = Eigen::MatrixXd::Identity(8, 8) * 100.0;
-
-    // Threshold for culling and displaying
-    const double cull_threshold = 150.0;
-    const double display_threshold = 30.0;
+    Eigen::MatrixXd P_cov_ = Eigen::MatrixXd::Identity(8, 8);
 
     // Pertubation Matrix for prediction 
-    Eigen::MatrixXd Q_cov = Eigen::MatrixXd::Identity(8, 8) * 10.0;
+    Eigen::MatrixXd Q_cov_ = Eigen::MatrixXd::Identity(8, 8);
 
     // Pertubation Matrix for measurement
-    Eigen::MatrixXd R_cov = Eigen::MatrixXd::Identity(4, 4) * 7.5;
+    Eigen::MatrixXd R_cov_ = Eigen::MatrixXd::Identity(4, 4);
+
+    // Params
+    FilterParams params_;
 
     // Current timestamp
-    double ts = 0;
+    double ts_ = 0;
 
     // Create state vector
     Eigen::VectorXd getState() const
@@ -203,10 +252,10 @@ private:
         state[1] = box.center[1];
         state[2] = box.width;
         state[3] = box.height;
-        state[4] = vel_cx;
-        state[5] = vel_cy;
-        state[6] = vel_w;
-        state[7] = vel_h;
+        state[4] = vel_cx_;
+        state[5] = vel_cy_;
+        state[6] = vel_w_;
+        state[7] = vel_h_;
 
         return state;
     };
@@ -221,10 +270,10 @@ private:
         box.height = state[3];
 
         // Update velocities
-        vel_cx = state[4];
-        vel_cy = state[5];
-        vel_w = state[6];
-        vel_h = state[7];
+        vel_cx_ = state[4];
+        vel_cy_ = state[5];
+        vel_w_ = state[6];
+        vel_h_ = state[7];
     };
 
     // Create H matrix
@@ -246,10 +295,10 @@ private:
         const Eigen::Matrix<double, 4, 8> &H) const
     {
         // Calculate the innovation covariance S
-        Eigen::Matrix4d S = (H * P_cov * H.transpose()) + R_cov;
+        Eigen::Matrix4d S = (H * P_cov_ * H.transpose()) + R_cov_;
 
         // Calculate the Kalman Gain K
-        Eigen::Matrix<double, 8, 4> K = P_cov * H.transpose() * S.inverse();
+        Eigen::Matrix<double, 8, 4> K = P_cov_ * H.transpose() * S.inverse();
 
         return K;
     };

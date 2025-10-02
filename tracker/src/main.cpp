@@ -103,7 +103,7 @@ void emulateAndTrack(const std::map<std::string, std::vector<Box>>& data,
 
 int main(int argc, char *argv[]) 
 {
-    // @TODO parse in cfg file
+    // Parse in configuration file
     std::string path_to_config = "../cfg/config.yaml";
 
     // Load configuration
@@ -119,6 +119,18 @@ int main(int argc, char *argv[])
         config["visualisation"]["scale"].as<double>();
     const double visualisation_slow_factor =
         config["visualisation"]["slow_factor"].as<double>();
+
+    // Create filter params
+    FilterParams params(
+        config["filter_params"]["initial_P_pos_cov"].as<double>(),
+        config["filter_params"]["initial_P_vel_cov"].as<double>(),
+        config["filter_params"]["process_Q_pos_cov"].as<double>(),
+        config["filter_params"]["process_Q_vel_cov"].as<double>(),
+        config["filter_params"]["R_cov"].as<double>(),
+        config["filter_params"]["cull_threshold"].as<double>(),
+        config["filter_params"]["display_threshold"].as<double>(),
+        config["filter_params"]["overlap_threshold"].as<double>()
+    );
 
     // Create emulator
     Emulator emulator(baseDirectory);
@@ -141,7 +153,7 @@ int main(int argc, char *argv[])
         emulator.getTimestampMap();
 
     // Create the tracking manager
-    BoxTracker tracker;
+    BoxTracker tracker(params);
 
     // Run emulate and tracking loop
     emulateAndTrack(data, timestamp_image_map, tracker, 

@@ -1,6 +1,27 @@
-directory: "../../data/benchmark"
+# directory: "../../data/motile_conf_30"
+directory: "../../data/basler_40_conf_30"
+# directory: "../../data/test_conf_30"
 
 visualisation:
   debug: true
-  scale: 0.7
+  scale: 0.5
   slow_factor: 5.0 # Higher number is slower
+
+# Tuning parameters below
+filter_params:
+  # Number to increase/decrease confidence in initial position
+  initial_P_pos_cov: 50.0 
+  # Number to increase/decrease confidence in initial velocity
+  initial_P_vel_cov: 5.0 
+  # Process noise covariance for position (how much we expect position to change)
+  process_Q_pos_cov: 5.0 
+  # Process noise covariance for velocity (how much we expect velocity to change)
+  process_Q_vel_cov: 1.0 
+  # Measurement noise covariance (how much we expect measurements to vary)
+  R_cov: 5.0 
+  # Threshold for culling lost tracks
+  cull_threshold: 150.0 
+  # Threshold for displaying tracks
+  display_threshold: 100.0 
+  # Threshold for overlap based on IoU to remove boxes
+  overlap_threshold: 0.25

@@ -13,8 +13,8 @@
 class BoxTracker
 {
 public:
-    // Constructor
-    BoxTracker() {};
+    // Constructor 
+    BoxTracker(const FilterParams& params) : params_(params) {};
 
     // Check if map is empty
     bool isEmpty() const
@@ -37,7 +37,8 @@ public:
 
         for (const auto& box : filtered_boxes)
         {
-            tracked_boxes_.emplace(id_counter++, BoxFilter(box, timestamp));
+            tracked_boxes_.emplace(id_counter++, BoxFilter(
+                box, timestamp, params_));
         }
 
         // Print number of tracked boxes
@@ -99,7 +100,7 @@ public:
     const std::unordered_map<int, BoxFilter>& getTrackedBoxes() const
     {
         return tracked_boxes_;
-    }
+    };
 
 private:
     // Unordered map
@@ -108,11 +109,14 @@ private:
     // ID counter
     int id_counter = 0;
 
+    // Filter parameters 
+    const FilterParams params_;
+
     // Run the hungarian algorithm to determine matches
     DataAssociationResults findBestMatches(
         const std::vector<Box>& boxes, const cv::Mat& image)
     {
-        HungarianSolver solver(tracked_boxes_, boxes);
+        HungarianSolver solver(tracked_boxes_, boxes, params_.overlap_threshold);
 
         DataAssociationResults results;
 
@@ -153,8 +157,8 @@ private:
         {
             for (int j = 0; j < cost_matrix.cols(); ++j)
             {
-                // Overlap threshold
-                if (cost_matrix(i, j) > 0.25)
+                // Overlap threshold 
+                if (cost_matrix(i, j) > params_.overlap_threshold)
                 {
                     // Arrange indices in ascending order
                     if (i > j)

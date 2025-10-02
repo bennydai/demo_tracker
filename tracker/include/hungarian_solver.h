@@ -44,9 +44,9 @@ class HungarianSolver
 public:
     // Constructor
     HungarianSolver(const std::unordered_map<int, BoxFilter> &tracked_boxes,
-        const std::vector<Box> &new_boxes) : tracked_boxes_(tracked_boxes),
+        const std::vector<Box> &new_boxes, const double &overlap_threshold) : tracked_boxes_(tracked_boxes),
         new_boxes_(new_boxes), num_tracked_(tracked_boxes.size()),
-        num_new_(new_boxes.size()) {};
+        num_new_(new_boxes.size()), overlap_threshold_(overlap_threshold) {};
 
     // Solve 
     bool solve(DataAssociationResults &results)
@@ -132,6 +132,9 @@ private:
     // Tracked boxes
     std::unordered_map<int, BoxFilter> tracked_boxes_;
     std::vector<Box> new_boxes_;
+
+    // Overlap threshold
+    const double overlap_threshold_;
 
     // Function to check if hungarian algorithm can be applied
     bool canApplyHungarian()
@@ -357,7 +360,7 @@ private:
         // Create a new set to return
         std::unordered_set<int> filtered_new_box_indices;
 
-        // Check if the columns have intersections over 0.25
+        // Check if the columns have intersections over a threshold
         for (int i = 0; i < cost_matrix.cols(); ++i)
         {
             // Grab the sum
@@ -368,7 +371,8 @@ private:
             std::advance(it, i);
             const int new_box_idx = *it;
 
-            if (col_sum < 0.25)
+            // overlap thresold
+            if (col_sum < overlap_threshold_)
             {
                 filtered_new_box_indices.insert(new_box_idx);
             }

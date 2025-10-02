@@ -128,7 +128,7 @@ cv::Mat drawBoxes(const cv::Mat &image, const std::vector<Box>& boxes,
     cv::Mat combined_image;
     cv::hconcat(raw_image, tracked_image, combined_image);
 
-    // @TODO draw stuff etc
+    // Return the combined image
     return combined_image;
 };
 
